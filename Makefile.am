@@ -1,39 +1,50 @@
-ACLOCAL_AMFLAGS = -I build-aux/m4
-SUBDIRS = lib
+generated_bindings = getters.py node_types.c operators.c props.c
 
-if WANT_TOOLS
-SUBDIRS += linter
-endif
+.NOTPARALLEL: $(generated_bindings)
+$(generated_bindings): $(top_srcdir)/lib/src/cypher-parser.h.in
+	$(PYTHON) $(top_srcdir)/build-aux/pycypher/generate-bindings.py < $<
 
-if WANT_PYTHON
-SUBDIRS += pycypher
-endif
+pkgpyexec_LTLIBRARIES = pycypher.la
+pycypher_la_SOURCES = \
+	bindings.c \
+	extract_props.c \
+	extract_props.h \
+	node_types.h \
+	operators.h \
+	parser.c \
+	parser.h \
+	props.h \
+	table_utils.h
+nodist_pycypher_la_SOURCES = \
+	operators.c \
+	node_types.c \
+	props.c
 
-EXTRA_DIST = \
-	LICENSE \
-	README.md
+EXTRA_DIST = __init__.py ast.py decorators.py setup.py
 
-docker-check:
-	@$(MAKE) dist
-	@echo "Building docker image..."
-	@docker run -t --rm -v $(abs_builddir):/$(PACKAGE) \
-		`docker build . -q -f build-aux/build.dockerfile` \
-		sh /$(PACKAGE)/build-aux/check-package.sh /$(PACKAGE)/$(DIST_ARCHIVES) $(distdir)
+PYTHON_PREFIX = `$(PYTHON) -c 'import sys ; print sys.prefix'`
+PYTHON_LIBS="-lpython$PYTHON_VERSION"
 
-docker-valgrind:
-	@$(MAKE) dist
-	@echo "Building docker image..."
-	@docker run --rm -t -v $(abs_builddir):/$(PACKAGE) \
-		`docker build . -q -f build-aux/build.dockerfile` \
-		sh /$(PACKAGE)/build-aux/valgrind-package.sh /$(PACKAGE)/$(DIST_ARCHIVES) $(distdir)
+pycypher_la_CPPFLAGS = -I$(PYTHON_PREFIX)/include/python$(PYTHON_VERSION) -I$(top_srcdir)/lib/src
+pycypher_la_LDFLAGS = -avoid-version -module -lpython$(PYTHON_VERSION) $(top_builddir)/lib/src/libcypher-parser.la
 
-docker-pycypher:
-	$(MAKE) dist
-	ci/pycypher_linux_build.sh
 
-MAINTAINERCLEANFILES = \
-	build-aux/m4/libtool.m4 \
-	build-aux/m4/ltoptions.m4 \
-	build-aux/m4/ltsugar.m4 \
-	build-aux/m4/ltversion.m4 \
-	build-aux/m4/lt~obsolete.m4
+#all-local: .build/pycypher/bindings.so
+#
+#.build/pycypher/bindings.so: bindings.c node_types.c operators.c props.c extract_props.c parser.c
+#	cd $(srcdir) && $(PYTHON) setup.py build_ext \
+#		-I$(top_srcdir)/lib/src \
+#		-L$(top_builddir)/lib/src/.libs \
+#		-b $(abs_builddir)/.build -t $(abs_builddir)/.build \
+#		-v
+#	cp $(srcdir)/__init__.py $(builddir)/.build/pycypher
+#	cp $(srcdir)/ast.py $(builddir)/.build/pycypher
+#	cp $(srcdir)/decorators.py $(builddir)/.build/pycypher
+#	cp $(builddir)/getters.py $(builddir)/.build/pycypher
+#	cp $(srcdir)/setup.py $(builddir)/.build/pycypher
+#	cp $(srcdir)/version.py $(builddir)/.build/pycypher
+
+CLEANFILES = $(generated_bindings)
+
+#clean-local:
+#	-rm -rf .build

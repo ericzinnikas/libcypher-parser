@@ -1,2 +1,0 @@
-# @configure_input@
-__version__ = '@PACKAGE_PYTHON_VERSION@'
